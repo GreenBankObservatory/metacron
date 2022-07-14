@@ -1,6 +1,6 @@
 #!/bin/bash
 
-### metacron
+### metacron: check crontabs for multiple users/hosts
 #
 # Reads METACRON_USERHOSTS env variable (format 'user@host user@host ...')
 # SSH's to each user/host and prints the crontab
@@ -22,8 +22,12 @@ set -o nounset
 # Pipelines exit with rightmost non-zero exit code, or zero if fully successful
 set -o pipefail
 
+BOLD_BLUE="\e[1;34m"
+COLOR_OFF="\e[0m"
+BOLD_RED="\e[1;31m"
+
 die() {
-    echo "$@" >&2
+    echo -e "$@" >&2
     exit 1
 }
 
@@ -31,14 +35,21 @@ if [[ -z "${METACRON_USERHOSTS-}" ]]; then
     die "Must set METACRON_USERHOSTS env variable. Format: 'user@host user@host ...' (space-delimited)"
 fi
 
+exit_code=0
 # Split USERSHOSTS into an array
 IFS=' ' read -ra userhostarray <<< "$METACRON_USERHOSTS"
 for userhost in "${userhostarray[@]}"; do
     if [[ "$userhost" != *@* ]]; then
         die "Malformed user@host spec: '$userhost'"
     fi
-    echo "--- Checking cron for: $userhost ---" >&2
-    if ! ssh -q "$userhost" crontab -l 2>/dev/null; then
-        die "Failed to check crontab!"
+    echo -e "${BOLD_BLUE}--- Checking cron for: $userhost ---${COLOR_OFF}" >&2
+    if ! ssh "$userhost" crontab -l; then
+        echo -e "${BOLD_RED}Failed to check crontab!${COLOR_OFF}" >&2
+        exit_code=1
     fi
 done
+
+if [[ $exit_code != 0 ]]; then
+    echo -e "${BOLD_RED}Failed to query one or more userhosts!${COLOR_OFF}" >&2
+fi
+exit "$exit_code"
